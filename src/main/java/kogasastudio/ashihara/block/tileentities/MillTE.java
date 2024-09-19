@@ -1,9 +1,11 @@
 package kogasastudio.ashihara.block.tileentities;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.NonNullList;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
@@ -12,10 +14,10 @@ import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 
-public class MillTE extends AshiharaMachineTE implements IItemHandler, IFluidHandler {
+public class MillTE extends AshiharaMachineTE implements Container, IItemHandler, IFluidHandler {
 
-    public MillTE(BlockEntityType<?> type, BlockPos pos, BlockState blockState) {
-        super(type, pos, blockState);
+    public MillTE(BlockPos pos, BlockState blockState) {
+        super(TERegistryHandler.MILL_TE.get(), pos, blockState);
     }
 
     private final static int INVENTORY_CAPACITY = 3;
@@ -29,15 +31,65 @@ public class MillTE extends AshiharaMachineTE implements IItemHandler, IFluidHan
 
     private final static float MAX_ANGULAR_VELOCITY = 5;
 
+    private final ItemStackHandler inventory = new ItemStackHandler(INVENTORY_CAPACITY);
+    private final FluidTank inputTank = new FluidTank(1000);
+    private final FluidTank outputTank = new FluidTank(1000);
+
     private boolean working = false;
-
-    private ItemStackHandler inventory = new ItemStackHandler(INVENTORY_CAPACITY);
-
-    private FluidStack inputTank = FluidStack.EMPTY;
-    private FluidStack outputTank = FluidStack.EMPTY;
-
     private float angularVelocity = 0;
     private float circle = 0;
+
+    public static void tick(@NotNull Level level, @NotNull BlockPos pos, @NotNull BlockState state, @NotNull BlockEntity mill) {
+
+    }
+
+    @Override
+    public int getContainerSize() {
+        return getSlots();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        for (var i = 0; i < getContainerSize(); i++) {
+            if (!getItem(i).isEmpty()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    @Override
+    public @NotNull ItemStack getItem(int slot) {
+        return getStackInSlot(slot);
+    }
+
+    @Override
+    public @NotNull ItemStack removeItem(int slot, int amount) {
+        return extractItem(slot, amount, false);
+    }
+
+    @Override
+    public @NotNull ItemStack removeItemNoUpdate(int slot) {
+        return extractItem(slot, getItem(slot).getCount(), true);
+    }
+
+    @Override
+    public void setItem(int slot, @NotNull ItemStack stack) {
+        inventory.setStackInSlot(slot, stack);
+    }
+
+    @Override
+    public boolean stillValid(@NotNull Player player) {
+        return Container.stillValidBlockEntity(this, player);
+    }
+
+    @Override
+    public void clearContent() {
+        for (var i = 0; i < getContainerSize(); i++) {
+            inventory.setStackInSlot(i, ItemStack.EMPTY);
+        }
+    }
 
     @Override
     public int getSlots() {
@@ -77,34 +129,43 @@ public class MillTE extends AshiharaMachineTE implements IItemHandler, IFluidHan
     @Override
     public @NotNull FluidStack getFluidInTank(int tank) {
         return switch (tank) {
-            case INPUT_SLOT_ID -> inputTank;
+            case INPUT_TANK_ID -> inputTank.getFluidInTank(tank);
+            case OUTPUT_TANK_ID -> outputTank.getFluidInTank(tank);
             default -> throw new IllegalStateException("Unexpected value: " + tank);
         };
     }
 
     @Override
     public int getTankCapacity(int tank) {
-        return 0;
+        return switch (tank) {
+            case INPUT_TANK_ID -> inputTank.getTankCapacity(tank);
+            case OUTPUT_TANK_ID -> outputTank.getTankCapacity(tank);
+            default -> throw new IllegalStateException("Unexpected value: " + tank);
+        };
     }
 
     @Override
     public boolean isFluidValid(int tank, @NotNull FluidStack stack) {
-        return false;
+        return switch (tank) {
+            case INPUT_TANK_ID -> inputTank.isFluidValid(tank, stack);
+            case OUTPUT_TANK_ID -> outputTank.isFluidValid(tank, stack);
+            default -> throw new IllegalStateException("Unexpected value: " + tank);
+        };
     }
 
     @Override
     public int fill(@NotNull FluidStack resource, @NotNull FluidAction action) {
-        return 0;
+        return inputTank.fill(resource, action);
     }
 
     @Override
     public @NotNull FluidStack drain(@NotNull FluidStack resource, @NotNull FluidAction action) {
-        return null;
+        return outputTank.drain(resource, action);
     }
 
     @Override
     public @NotNull FluidStack drain(int maxDrain, @NotNull FluidAction action) {
-        return null;
+        return outputTank.drain(maxDrain, action);
     }
 
     /*public GenericItemStackHandler input = new GenericItemStackHandler(4);
